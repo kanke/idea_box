@@ -1,0 +1,344 @@
+﻿using System;
+using System.Collections;
+using System.Configuration;
+using System.Data;
+using System.Linq;
+using System.Web;
+using System.Web.Security;
+using System.Web.UI;
+using System.Web.UI.HtmlControls;
+using System.Web.UI.WebControls;
+using System.Web.UI.WebControls.WebParts;
+using System.Xml.Linq;
+using System.Data.SqlClient;
+using System.Data.Sql;
+using System.IO;
+using System.Text;
+using CarlosAg.ExcelXmlWriter;
+
+public partial class report_details : System.Web.UI.Page
+{
+
+    protected void Page_Load(object sender, EventArgs e)
+    {
+        dset = new DataTable();
+        string conn = ConfigurationManager.ConnectionStrings["IdeaConnectionString"].ConnectionString;
+
+        string sql = @"SELECT i.staff_id
+                              ,i.staff_name
+	                          ,i.staff_unit_id      
+	                           ,i.idea_text
+	                           ,d.dept_name
+	                           ,u.unit_name
+                               ,i.date
+    
+        from idea.idea_box i
+        inner join idea.idea_dept d on i.dept_id = d.dept_id
+        inner join idea.idea_unit u on i.concen_unit = u.unit_id
+        order by i.staff_id,i.idea_text";
+       
+        SqlConnection connection = new SqlConnection(conn);
+        SqlCommand selectcommand = new SqlCommand(sql, connection);
+
+        SqlDataAdapter adap = new SqlDataAdapter(selectcommand);
+        adap.Fill(dset);
+
+        //fill dataset into gridview
+        GridView1.DataSource = dset;
+       
+        //bind data to gridview nd display.
+        GridView1.DataBind();
+        
+    }
+    protected DataTable dset
+    {
+        set
+        {
+            ViewState["dset"] = value;
+        }
+        get
+        {
+            return (ViewState["dset"] != null) ? (DataTable)ViewState["dset"] : new DataTable();
+        }
+    }
+    private DataTable GetData()
+    {
+        dset = new DataTable();
+        string conn = ConfigurationManager.ConnectionStrings["IdeaConnectionString"].ConnectionString;
+        SqlConnection connection = new SqlConnection(conn);
+
+
+        string op = "";
+        bool convert = false;
+        bool checkfromdate = true;
+        bool checktodate = true;
+
+        string sql = @"SELECT i.staff_id
+                    ,i.staff_name
+	                ,i.staff_unit_id      
+	                ,i.idea_text
+	                ,d.dept_name
+	                ,u.unit_name
+                    ,i.date
+    
+        from idea.idea_box i
+        inner join idea.idea_dept d on i.dept_id = d.dept_id
+        inner join idea.idea_unit u on i.concen_unit = u.unit_id";
+
+        switch (SearchDropDownList.SelectedValue)
+        {
+            case "staff_id":
+            case "staff_name":
+            case "staff_unit_id":
+            case "idea_text":
+                //op = "like";
+                //searchField = "%" + searchField + "%";
+                //convert = true;
+                whereClause = " where " + SearchDropDownList.SelectedValue + " like '%" + SearchTextBox.Text + "%'";
+                break;
+            case "date":
+                //searchField = "'" + searchField + "'";
+                whereClause = " where " + SearchDropDownList.SelectedValue + " between '" + fromTextBox.Text + "' and '" + toTextBox.Text + "'";
+                //op = " <= ";
+                break;
+            case "dept_id":
+            case "concen_unit":
+                //op = "=";
+                whereClause = " where " + SearchDropDownList.SelectedValue + " = " + SearchTextBox.Text;
+                break;
+        }
+
+        if (fromTextBox.Text = " ")
+        {
+            checkfromdate = false;
+        }
+      
+        if (toTextBox.Text = " ")
+        {
+            checktodate= false;
+        }
+
+        string sql = @"SELECT i.staff_id
+                    ,i.staff_name
+	                ,i.staff_unit_id      
+	                ,i.idea_text
+	                ,d.dept_name
+	                ,u.unit_name
+                    ,i.date
+    
+        from idea.idea_box i
+        inner join idea.idea_dept d on i.dept_id = d.dept_id
+        inner join idea.idea_unit u on i.concen_unit = u.unit_id";
+//        where i.date >= @fromdate and i.date <= @todate";
+
+        //if (convert)
+        //{
+        //    sql += "where UPPER (" + SearchDropDownList.SelectedValue + ") " + op + " UPPER ('" + searchField + "')";
+        //}
+        //else
+        //{
+        //    sql += "and " + SearchDropDownList.SelectedValue + " " + op + " " + searchField;
+        //}
+
+        //if (checkfromdate == false && checktodate == false)
+        //{
+        //    sql += " " + "and i.date >= @fromdate and i.date <= @todate";
+           
+        //}
+
+        SqlCommand selectcommand = new SqlCommand(sql, connection);
+
+        selectcommand.Parameters.AddWithValue("@fromdate", fromTextBox.Text);
+        selectcommand.Parameters.AddWithValue("@todate", toTextBox.Text);
+        connection.Open();
+
+        SqlDataAdapter adap = new SqlDataAdapter(selectcommand);
+        adap.Fill(dset);
+
+        return dset;
+    }
+    private void DisplayResults()
+    {
+        //this method calls the getData metod and binds the data to the gridview
+        GridView1.DataSource = GetData();
+        GridView1.DataBind();
+
+    }
+    protected void Button2_Click(object sender, EventArgs e)
+    {
+        //calling the method DisplayResults
+        DisplayResults();
+
+    }
+    protected void Button1_Click(object sender, EventArgs e)
+    {
+        fromTextBox.Text = "";
+        toTextBox.Text = "";
+    }
+    protected void GridView1_PageIndexChanging(object sender, GridViewPageEventArgs e)
+    {
+        //page indexing change; fetch data and bind to gridview for page change
+        GridView1.PageIndex = e.NewPageIndex;
+        GridView1.DataSource = GetData();
+        GridView1.DataBind();
+    }
+
+    private void ExportEx()
+    {
+        DataTable dt = GetData();
+
+        Workbook book = new Workbook();
+
+        //name the worksheet
+        Worksheet sheet = book.Worksheets.Add("Idea Box : Report");
+
+       //create header styles
+        WorksheetStyle style = book.Styles.Add("HeaderStyle");
+        style.Font.FontName = "Tahoma";
+        style.Font.Size = 14;
+        style.Font.Bold = true;
+        style.Alignment.Horizontal = StyleHorizontalAlignment.Center;
+        style.Font.Color = "White";
+        style.Interior.Color = "Blue";
+        style.Interior.Pattern = StyleInteriorPattern.DiagCross;
+
+        //Create the Default Style to use for everyone
+        style = book.Styles.Add("Default");
+        style.Font.FontName = "Tahoma";
+        style.Font.Size = 10;
+
+
+        WorksheetRow wsrow = sheet.Table.Rows.Add();
+        //foreach (DataColumn TCol in dt.Columns) {
+      
+        //add the Excel headers using the header style
+            wsrow.Cells.Add("Date", DataType.String, "HeaderStyle");
+            wsrow.Cells.Add("Staff ID", DataType.String, "HeaderStyle");
+            wsrow.Cells.Add("Staff Name", DataType.String, "HeaderStyle");
+           wsrow.Cells.Add("Staff Unit", DataType.String, "HeaderStyle");
+            wsrow.Cells.Add("Idea", DataType.String, "HeaderStyle");
+            wsrow.Cells.Add("Department of Concen", DataType.String, "HeaderStyle");
+            wsrow.Cells.Add("Unit of Concen", DataType.String, "HeaderStyle");
+
+        //add column and row 
+        foreach (DataRow Row in dt.Rows) {
+	        wsrow = sheet.Table.Rows.Add();
+	        foreach (DataColumn TCol in dt.Columns) {
+		        wsrow.Cells.Add(Row[TCol].ToString());
+	        }
+        }
+
+        //Export the grid data to excel sheet
+        Response.ClearContent();
+        Response.ClearHeaders();
+        Response.ContentType = "application/vnd.ms-excel";
+
+        //name the excel file
+        Response.AddHeader("Content-Disposition", "attachment;filename=Idea-Box-Report" + DateTime.Now.ToString("yyyyMMddhhmm") + ".xls");
+        book.Save(Response.OutputStream);
+        Response.End();
+    }
+    public static void Export(string fileName, GridView gv)
+    {
+        string style = @"<style> .text { mso-number-format:\@; } </style> ";
+        HttpContext.Current.Response.Clear();
+        HttpContext.Current.Response.AddHeader(
+        "content-disposition", string.Format("attachment; filename={0}", fileName));
+        HttpContext.Current.Response.ContentType = "application/ms-excel";
+
+        using (StringWriter sw = new StringWriter())
+        {
+            using (HtmlTextWriter htw = new HtmlTextWriter(sw))
+            {
+                // Create a form to contain the grid
+                Table table = new Table();
+
+                // add the header row to the table
+                if (gv.HeaderRow != null)
+                {
+                    PrepareControlForExport(gv.HeaderRow);
+                    table.Rows.Add(gv.HeaderRow);
+                }
+
+                // add each of the data rows to the table
+                foreach (GridViewRow row in gv.Rows)
+                {
+                    PrepareControlForExport(row);
+                    table.Rows.Add(row);
+                }
+
+                // add the footer row to the table
+                if (gv.FooterRow != null)
+                {
+                    PrepareControlForExport(gv.FooterRow);
+                    table.Rows.Add(gv.FooterRow);
+                }
+
+                // render the table into the htmlwriter
+                table.RenderControl(htw);
+                HttpContext.Current.Response.Write(style);
+                HttpContext.Current.Response.Write(sw.ToString());
+                HttpContext.Current.Response.End();
+            }
+        }
+    }
+    private static void PrepareControlForExport(Control control)
+    {
+        for (int i = 0; i < control.Controls.Count; i++)
+        {
+            Control current = control.Controls[i];
+            if (current is Label)
+            {
+                control.Controls.Remove(current);
+                control.Controls.AddAt(i, new LiteralControl((current as Label).Text));
+            }
+            if (current is LinkButton)
+            {
+                control.Controls.Remove(current);
+                control.Controls.AddAt(i, new LiteralControl((current as LinkButton).Text));
+            }
+            else if (current is ImageButton)
+            {
+                control.Controls.Remove(current);
+                control.Controls.AddAt(i, new LiteralControl((current as ImageButton).AlternateText));
+            }
+            else if (current is HyperLink)
+            {
+                control.Controls.Remove(current);
+                control.Controls.AddAt(i, new LiteralControl((current as HyperLink).Text));
+            }
+            else if (current is DropDownList)
+            {
+                control.Controls.Remove(current);
+                control.Controls.AddAt(i, new LiteralControl((current as DropDownList).SelectedItem.Text));
+            }
+            else if (current is CheckBox)
+            {
+                control.Controls.Remove(current);
+                control.Controls.AddAt(i, new LiteralControl((current as CheckBox).Checked ? "True" : "False"));
+            }
+
+            if (current.HasControls())
+            {
+                PrepareControlForExport(current);
+            }
+        }
+    }
+
+    protected void ImageButton1_Click(object sender, ImageClickEventArgs e)
+    {
+
+    }
+
+    protected void ImageButton1_Click1(object sender, ImageClickEventArgs e)
+    {
+        //calling the method Export Ex
+        ExportEx();
+        
+    }
+    protected void ExportImageButton_Click(object sender, ImageClickEventArgs e)
+    {
+        
+    }
+}
+    
